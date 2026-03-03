@@ -1,0 +1,17 @@
+{
+  "name": "botopogodka",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "vercel",
+    "dev": "node server.js",
+    "dev:vercel": "vercel dev"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "vercel": "^50.25.6"
+  }
+}
