@@ -173,6 +173,10 @@ async function handleCallback(cq) {
     await telegram.sendMessage(chatId, 'Введіть час нагадування у форматі ГГ:ХХ (наприклад 07:30):');
     return;
   }
+  if (data === 'settings') {
+    await telegram.sendMessage(chatId, '⚙ Налаштування:', { reply_markup: telegram.buildSettingsKeyboard() });
+    return;
+  }
   if (data === 'back_menu' || data === 'help') {
     if (data === 'help') {
       await telegram.sendMessage(chatId, HELP_TEXT, { reply_markup: telegram.buildMainKeyboard() });
