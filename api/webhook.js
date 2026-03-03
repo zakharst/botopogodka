@@ -11,21 +11,7 @@ import * as ai from '../lib/ai.js';
 import * as fallback from '../lib/fallback_advice.js';
 import { PROFILES } from '../lib/storage.js';
 
-const HELP_TEXT = `<b>Допомога</b>
-
-<b>Команди:</b>
-/start — головне меню
-/help — ця довідка
-
-<b>Меню:</b>
-• <b>Погода зараз</b> — поточна погода у вашому місті (потрібно спочатку вказати місто).
-• <b>Що вдягнути</b> — рекомендації одягу з урахуванням погоди та обраного профілю (AI або правило-фолбек).
-• <b>Пояснення</b> — коротке пояснення погоди (AI або фолбек).
-• <b>Профіль</b> — обрати сценарій: офіс, прогулянка, біг, авто, з дитиною, мото/скутер.
-• <b>Місто</b> — вказати «місто, країна» (наприклад: Тернопіль, Україна). Час і автопости рахуються за локальним часом цього міста.
-• <b>Налаштування часу</b> — увімкнути/вимкнути одне нагадування на день о 07:30 за місцевим часом (або задати свій час).
-
-Нагадування відправляється за локальним часом міста, яке ви обрали.`;
+const HELP_TEXT = `Місто вводьте у форматі: Місто, Країна (наприклад: Тернопіль, Україна). Після цього отримаєте повний прогноз одним повідомленням. Поради щодо одягу — окремо: напишіть «що вдягнути» або натисніть кнопку в меню. В Налаштуваннях: профіль та час ранкового нагадування (07:30 за вашим часом).`;
 
 function parseTime(str) {
   const t = str.trim();
@@ -142,7 +128,7 @@ async function handleCallback(cq) {
   }
   if (data === 'city') {
     await state.setInputState(chatId, 'awaiting_city');
-    await telegram.sendMessage(chatId, 'Введіть місто у форматі «місто, країна», наприклад:\n• Тернопіль, Україна\n• Київ, UA\n• Ternopil, UA\n• Kraków, Poland');
+    await telegram.sendMessage(chatId, 'Введіть місто у форматі: Місто, Країна.\n\nНаприклад: Тернопіль, Україна або Warsaw, Poland');
     return;
   }
   if (data === 'time_settings') {
@@ -187,13 +173,23 @@ async function handleCallback(cq) {
   }
 }
 
+function normalizeOutfitTrigger(t) {
+  return (t || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 async function handleMessage(msg) {
   const chatId = msg.chat.id;
   const telegramId = String(msg.from.id);
   const text = (msg.text || '').trim();
 
   if (text === '/start') {
-    await telegram.sendMessage(chatId, 'Вітаю! Ось головне меню. Спочатку вкажіть місто в «📍 Місто».', { reply_markup: telegram.buildMainKeyboard() });
+    const user = await storage.getUser(telegramId);
+    if (user.lat != null && user.lon != null) {
+      await telegram.sendMessage(chatId, 'Головне меню:', { reply_markup: telegram.buildMainKeyboard() });
+      return;
+    }
+    const keyboard = { inline_keyboard: [[{ text: '📍 Ввести місто', callback_data: 'city' }]] };
+    await telegram.sendMessage(chatId, 'Привіт 👋\n\nБудь ласка, введіть місто у форматі: Місто, Країна. Так ми уникнемо плутанини між містами з однаковою назвою.\n\nНаприклад: Тернопіль, Україна', { reply_markup: keyboard });
     return;
   }
   if (text === '/help') {
@@ -212,11 +208,11 @@ async function handleMessage(msg) {
     try {
       geo = await weather.geocode(text);
     } catch (e) {
-      await telegram.sendMessage(chatId, 'Не вдалося знайти місто. Перевірте написання (місто, країна) і спробуйте знову.');
+      await telegram.sendMessage(chatId, 'Зараз не можу перевірити місто. Спробуйте пізніше.');
       return;
     }
     if (!geo) {
-      await telegram.sendMessage(chatId, 'Місто не знайдено. Спробуйте ще раз у форматі «місто, країна» або «місто, UA» (наприклад: Тернопіль, Україна або Ternopil, UA).');
+      await telegram.sendMessage(chatId, 'Не знайшов такого міста. Спробуйте ще раз у форматі «місто, країна».');
       return;
     }
     let timezoneOffsetSeconds = null;
@@ -231,7 +227,17 @@ async function handleMessage(msg) {
       lon: geo.lon,
       timezoneOffsetSeconds,
     });
-    await telegram.sendMessage(chatId, `Місто збережено: ${geo.displayName}. Тепер можете дивитися погоду та поради.`, { reply_markup: telegram.buildMainKeyboard() });
+    let w;
+    try {
+      w = await weather.getOneCall(geo.lat, geo.lon);
+    } catch (e) {
+      await telegram.sendMessage(chatId, 'Зараз не можу отримати погоду. Спробуйте пізніше.', { reply_markup: telegram.buildMainKeyboard() });
+      return;
+    }
+    const offset = timezoneOffsetSeconds ?? w.timezoneOffsetSeconds ?? 0;
+    const local = weather.getLocalTimeStrings(offset);
+    const weatherText = format.formatWeather(w, geo.displayName, local.time);
+    await telegram.sendMessage(chatId, weatherText, { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   if (inputState?.state === 'awaiting_morning_time') {
@@ -246,20 +252,74 @@ async function handleMessage(msg) {
     return;
   }
 
+  if (text && normalizeOutfitTrigger(text) === 'що вдягнути') {
+    const user = await storage.getUser(telegramId);
+    if (user.lat == null || user.lon == null) {
+      await telegram.sendMessage(chatId, 'Будь ласка, спочатку вкажіть місто (напишіть його або натисніть «📍 Місто»).', { reply_markup: telegram.buildMainKeyboard() });
+      return;
+    }
+    const keyboard = {
+      inline_keyboard: PROFILES.map(p => [
+        { text: format.profileLabel(p) + (user.profile === p ? ' ✓' : ''), callback_data: `outfit:${p}` },
+      ]),
+    };
+    await telegram.sendMessage(chatId, '🧥 Оберіть профіль для поради «Що вдягнути»:', { reply_markup: keyboard });
+    return;
+  }
+
+  const user = await storage.getUser(telegramId);
+  if ((user.lat == null || user.lon == null) && text) {
+    let geo;
+    try {
+      geo = await weather.geocode(text);
+    } catch (e) {
+      await telegram.sendMessage(chatId, 'Зараз не можу перевірити місто. Спробуйте пізніше.');
+      return;
+    }
+    if (!geo) {
+      await telegram.sendMessage(chatId, 'Не знайшов такого міста. Спробуйте ще раз у форматі «місто, країна».');
+      return;
+    }
+    let timezoneOffsetSeconds = null;
+    try {
+      const oneCall = await weather.getOneCall(geo.lat, geo.lon);
+      timezoneOffsetSeconds = oneCall.timezoneOffsetSeconds;
+    } catch (_) {}
+    await storage.setUser(telegramId, {
+      city: `${geo.lat},${geo.lon}`,
+      cityDisplay: geo.displayName,
+      lat: geo.lat,
+      lon: geo.lon,
+      timezoneOffsetSeconds,
+    });
+    let w;
+    try {
+      w = await weather.getOneCall(geo.lat, geo.lon);
+    } catch (e) {
+      await telegram.sendMessage(chatId, 'Зараз не можу отримати погоду. Спробуйте пізніше.', { reply_markup: telegram.buildMainKeyboard() });
+      return;
+    }
+    const offset = timezoneOffsetSeconds ?? w.timezoneOffsetSeconds ?? 0;
+    const local = weather.getLocalTimeStrings(offset);
+    const weatherText = format.formatWeather(w, geo.displayName, local.time);
+    await telegram.sendMessage(chatId, weatherText, { reply_markup: telegram.buildMainKeyboard() });
+    return;
+  }
+
   await telegram.sendMessage(chatId, 'Оберіть пункт у меню нижче або натисніть /start.', { reply_markup: telegram.buildMainKeyboard() });
 }
 
 async function actionWeather(chatId, telegramId) {
   const user = await storage.getUser(telegramId);
   if (user.lat == null || user.lon == null) {
-    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто в «📍 Місто».', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Будь ласка, спочатку вкажіть місто (напишіть його або натисніть «📍 Місто»).', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   let w;
   try {
     w = await weather.getOneCall(user.lat, user.lon);
   } catch (e) {
-    await telegram.sendMessage(chatId, 'Не вдалося отримати погоду. Спробуйте пізніше.');
+    await telegram.sendMessage(chatId, 'Зараз не можу отримати погоду. Спробуйте пізніше.');
     return;
   }
   if (user.timezoneOffsetSeconds == null && w.timezoneOffsetSeconds != null) {
@@ -290,14 +350,14 @@ async function getWeatherContext(user) {
 async function actionOutfit(chatId, telegramId) {
   const user = await storage.getUser(telegramId);
   if (user.lat == null || user.lon == null) {
-    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто в «📍 Місто».', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Будь ласка, спочатку вкажіть місто (напишіть його або натисніть «📍 Місто»).', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   let ctx;
   try {
     ctx = await getWeatherContext({ ...user, telegramId });
   } catch (e) {
-    await telegram.sendMessage(chatId, 'Не вдалося отримати погоду. Спробуйте пізніше.');
+    await telegram.sendMessage(chatId, 'Зараз не можу отримати погоду. Спробуйте пізніше.');
     return;
   }
   const pl = format.profileLabel(user.profile);
@@ -318,14 +378,14 @@ async function actionOutfit(chatId, telegramId) {
 async function actionExplain(chatId, telegramId) {
   const user = await storage.getUser(telegramId);
   if (user.lat == null || user.lon == null) {
-    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто в «📍 Місто».', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Будь ласка, спочатку вкажіть місто (напишіть його або натисніть «📍 Місто»).', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   let ctx;
   try {
     ctx = await getWeatherContext({ ...user, telegramId });
   } catch (e) {
-    await telegram.sendMessage(chatId, 'Не вдалося отримати погоду. Спробуйте пізніше.');
+    await telegram.sendMessage(chatId, 'Зараз не можу отримати погоду. Спробуйте пізніше.');
     return;
   }
   const pl = format.profileLabel(user.profile);
