@@ -23,9 +23,9 @@ const HELP_TEXT = `<b>Допомога</b>
 • <b>Пояснення</b> — коротке пояснення погоди (AI або фолбек).
 • <b>Профіль</b> — обрати сценарій: офіс, прогулянка, біг, авто, з дитиною, мото/скутер.
 • <b>Місто</b> — вказати «місто, країна» (наприклад: Тернопіль, Україна). Час і автопости рахуються за локальним часом цього міста.
-• <b>Налаштування часу</b> — увімкнути/вимкнути автопости о 07:30 та 20:00 за <i>вашим</i> локальним часом міста та задати свої години.
+• <b>Налаштування часу</b> — увімкнути/вимкнути одне нагадування на день о 07:30 за місцевим часом (або задати свій час).
 
-Усі автопости відправляються за локальним часом міста, яке ви обрали (часовий пояс з OpenWeather).`;
+Нагадування відправляється за локальним часом міста, яке ви обрали.`;
 
 function parseTime(str) {
   const t = str.trim();
@@ -145,12 +145,8 @@ async function handleCallback(cq) {
     const user = await storage.getUser(telegramId);
     const keyboard = {
       inline_keyboard: [
-        [
-          { text: user.autopostMorning ? 'Ранок ВИМК' : 'Ранок УВІМК', callback_data: user.autopostMorning ? 'time_morning_off' : 'time_morning_on' },
-          { text: user.autopostEvening ? 'Вечір ВИМК' : 'Вечір УВІМК', callback_data: user.autopostEvening ? 'time_evening_off' : 'time_evening_on' },
-        ],
-        [{ text: 'Час ранку (07:30)', callback_data: 'time_set_morning' }],
-        [{ text: 'Час вечора (20:00)', callback_data: 'time_set_evening' }],
+        [{ text: user.autopostMorning ? 'Ранок ВИМК' : 'Ранок УВІМК', callback_data: user.autopostMorning ? 'time_morning_off' : 'time_morning_on' }],
+        [{ text: 'Час нагадування (07:30)', callback_data: 'time_set_morning' }],
         [{ text: '← Назад', callback_data: 'back_menu' }],
       ],
     };
@@ -160,33 +156,17 @@ async function handleCallback(cq) {
   if (data === 'time_morning_on') {
     await storage.setUser(telegramId, { autopostMorning: true });
     const user = await storage.getUser(telegramId);
-    await telegram.sendMessage(chatId, 'Ранковий автопост увімкнено о ' + (user.morningTime || '07:30') + ' за вашим локальним часом.', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Ранкове нагадування увімкнено о ' + (user.morningTime || '07:30') + ' за місцевим часом.', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   if (data === 'time_morning_off') {
     await storage.setUser(telegramId, { autopostMorning: false });
-    await telegram.sendMessage(chatId, 'Ранковий автопост вимкнено.', { reply_markup: telegram.buildMainKeyboard() });
-    return;
-  }
-  if (data === 'time_evening_on') {
-    await storage.setUser(telegramId, { autopostEvening: true });
-    const user = await storage.getUser(telegramId);
-    await telegram.sendMessage(chatId, 'Вечірній автопост увімкнено о ' + (user.eveningTime || '20:00') + ' за вашим локальним часом.', { reply_markup: telegram.buildMainKeyboard() });
-    return;
-  }
-  if (data === 'time_evening_off') {
-    await storage.setUser(telegramId, { autopostEvening: false });
-    await telegram.sendMessage(chatId, 'Вечірній автопост вимкнено.', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Ранкове нагадування вимкнено.', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   if (data === 'time_set_morning') {
     await state.setInputState(chatId, 'awaiting_morning_time');
-    await telegram.sendMessage(chatId, 'Введіть час ранкового повідомлення у форматі ГГ:ХХ (наприклад 07:30):');
-    return;
-  }
-  if (data === 'time_set_evening') {
-    await state.setInputState(chatId, 'awaiting_evening_time');
-    await telegram.sendMessage(chatId, 'Введіть час вечірнього повідомлення у форматі ГГ:ХХ (наприклад 20:00):');
+    await telegram.sendMessage(chatId, 'Введіть час нагадування у форматі ГГ:ХХ (наприклад 07:30):');
     return;
   }
   if (data === 'back_menu' || data === 'help') {
@@ -254,18 +234,7 @@ async function handleMessage(msg) {
       return;
     }
     await storage.setUser(telegramId, { morningTime: parsed });
-    await telegram.sendMessage(chatId, `Час ранкового автопосту встановлено: ${parsed}.`, { reply_markup: telegram.buildMainKeyboard() });
-    return;
-  }
-  if (inputState?.state === 'awaiting_evening_time') {
-    await state.clearInputState(chatId);
-    const parsed = parseTime(text);
-    if (!parsed) {
-      await telegram.sendMessage(chatId, 'Невірний формат. Введіть час як ГГ:ХХ (наприклад 20:00).');
-      return;
-    }
-    await storage.setUser(telegramId, { eveningTime: parsed });
-    await telegram.sendMessage(chatId, `Час вечірнього автопосту встановлено: ${parsed}.`, { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, `Час нагадування встановлено: ${parsed}.`, { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
 

@@ -1,7 +1,7 @@
 /**
- * Cron endpoint — викликається кожні 5 хвилин (UTC).
- * Для кожного користувача з увімкненими автопостами обчислює локальний час міста
- * і відправляє ранкове/вечірнє повідомлення, якщо поточний локальний час потрапляє у вікно ±5 хв.
+ * Cron endpoint — викликається раз на день (UTC).
+ * Для кожного користувача з увімкненим ранковим автопостом обчислює локальний час міста
+ * і відправляє одне повідомлення о 07:30 за місцевим часом (вікно ±5 хв).
  */
 
 import * as storage from '../lib/storage.js';
@@ -56,24 +56,11 @@ export default async function handler(req, res) {
       if (user.autopostMorning && timeInWindow(local.hours, local.minutes, user.morningTime || '07:30')) {
         if (user.lastSentMorningDate !== today) {
           try {
-            await sendAutopost(user, 'morning');
+            await sendAutopost(user);
             await storage.setUser(user.telegramId, { lastSentMorningDate: today });
             sent++;
           } catch (e) {
             console.error('tick morning', user.telegramId, e);
-            errors++;
-          }
-        }
-      }
-
-      if (user.autopostEvening && timeInWindow(local.hours, local.minutes, user.eveningTime || '20:00')) {
-        if (user.lastSentEveningDate !== today) {
-          try {
-            await sendAutopost(user, 'evening');
-            await storage.setUser(user.telegramId, { lastSentEveningDate: today });
-            sent++;
-          } catch (e) {
-            console.error('tick evening', user.telegramId, e);
             errors++;
           }
         }
@@ -87,7 +74,7 @@ export default async function handler(req, res) {
   res.status(200).json({ ok: true, sent, errors });
 }
 
-async function sendAutopost(user, type) {
+async function sendAutopost(user) {
   let ctx;
   try {
     ctx = await weather.getOneCall(user.lat, user.lon);
@@ -101,7 +88,7 @@ async function sendAutopost(user, type) {
     await storage.setUser(user.telegramId, { timezoneOffsetSeconds: ctx.timezoneOffsetSeconds });
   }
 
-  const greeting = type === 'morning' ? 'Доброго ранку!' : 'Добрий вечір!';
+  const greeting = 'Доброго ранку!';
   const weatherText = format.formatWeather(ctx, user.cityDisplay, local.time);
 
   const context = {
