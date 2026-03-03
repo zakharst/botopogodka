@@ -56,12 +56,15 @@ export default async function handler(req, res) {
     return;
   }
   try {
-    const lastId = await storage.getLastProcessedUpdateId();
+    let lastId = await storage.getLastProcessedUpdateId();
+    if (lastId > 900000000) {
+      await storage.setLastProcessedUpdateId(0);
+      lastId = 0;
+    }
     if (updateId <= lastId) {
       res.status(200).json({ ok: true });
       return;
     }
-    await storage.setLastProcessedUpdateId(updateId);
   } catch (e) {
     console.error('Redis update_id:', e);
     res.status(200).json({ ok: true });
@@ -74,6 +77,7 @@ export default async function handler(req, res) {
     } else if (update.message) {
       await handleMessage(update.message);
     }
+    await storage.setLastProcessedUpdateId(updateId);
   } catch (err) {
     console.error('Webhook handler:', err);
     const chatId = update.callback_query?.message?.chat?.id ?? update.message?.chat?.id;
