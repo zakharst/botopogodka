@@ -13,6 +13,8 @@ import { PROFILES } from '../lib/storage.js';
 
 const HELP_TEXT = `Формат міста: Місто, Країна. Погода — однією карткою. Поради щодо одягу — кнопка «Що вдягнути». В Налаштуваннях: місто, профіль, час нагадування.`;
 
+const WEATHER_WAIT_MSG = 'Дзвоню на метеостанцію, зачекай хвильку ☎️';
+
 function parseTime(str) {
   const t = str.trim();
   const m = t.match(/^(\d{1,2}):(\d{2})$/);
@@ -99,6 +101,7 @@ async function handleCallback(cq) {
     return;
   }
   if (data === 'weather') {
+    await telegram.sendMessage(chatId, WEATHER_WAIT_MSG);
     await actionWeather(chatId, telegramId);
     return;
   }
@@ -116,6 +119,7 @@ async function handleCallback(cq) {
       await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: Налаштування → Місто.', { reply_markup: telegram.buildMainKeyboard() });
       return;
     }
+    await telegram.sendMessage(chatId, WEATHER_WAIT_MSG);
     let forecastData;
     try {
       forecastData = await weather.getForecastDays(user.lat, user.lon);
@@ -164,7 +168,7 @@ async function handleCallback(cq) {
   if (data.startsWith('outfit:')) {
     const profile = data.replace('outfit:', '');
     if (PROFILES.includes(profile)) {
-      await telegram.sendMessage(chatId, 'Дзвоню на метеостанцію, зачекай хвильку ☎️');
+      await telegram.sendMessage(chatId, WEATHER_WAIT_MSG);
       await storage.setUser(telegramId, { profile });
       await actionOutfit(chatId, telegramId);
     }
@@ -291,6 +295,7 @@ async function handleMessage(msg) {
         return;
       }
     }
+    await telegram.sendMessage(chatId, WEATHER_WAIT_MSG);
     let timezoneOffsetSeconds = null;
     try {
       const oneCall = await weather.getOneCall(geo.lat, geo.lon);
@@ -357,6 +362,7 @@ async function handleMessage(msg) {
       await telegram.sendMessage(chatId, 'Не знайшов такого міста. Спробуйте ще раз у форматі «місто, країна».');
       return;
     }
+    await telegram.sendMessage(chatId, WEATHER_WAIT_MSG);
     let timezoneOffsetSeconds = null;
     try {
       const oneCall = await weather.getOneCall(geo.lat, geo.lon);
