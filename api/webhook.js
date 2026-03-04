@@ -73,7 +73,9 @@ export default async function handler(req, res) {
     if (chatId) {
       try {
         await telegram.sendMessage(chatId, 'Виникла помилка. Спробуйте пізніше або /start.');
-      } catch (_) {}
+      } catch (e2) {
+        console.error('Не вдалося надіслати повідомлення про помилку:', e2);
+      }
     }
   }
   res.status(200).json({ ok: true });
