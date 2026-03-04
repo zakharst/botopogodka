@@ -6,7 +6,8 @@
   "scripts": {
     "deploy": "vercel",
     "dev": "node server.js",
-    "dev:vercel": "vercel dev"
+    "dev:vercel": "vercel dev",
+    "broadcast": "node scripts/broadcast.js"
   },
   "engines": {
     "node": ">=18"
