@@ -123,12 +123,30 @@ async function handleCallback(cq) {
       return;
     }
     const cityDisplay = user.cityDisplay || null;
-    const text =
-      data === 'weather_weekend'
-        ? format.formatForecastWeekend(forecastData, cityDisplay)
-        : data === 'weather_week'
+    let text;
+    if (data === 'weather_weekend') {
+      const weekendDays = format.getWeekendDays(forecastData);
+      if (weekendDays.length > 0 && ai.isAiAvailable()) {
+        try {
+          const dataText = format.formatWeekendDataForAi(weekendDays, cityDisplay, forecastData.timezoneOffsetSeconds ?? 0);
+          const aiText = await ai.getWeekendForecastSummary(dataText);
+          if (aiText) {
+            text = format.getWeekendForecastHeader(cityDisplay) + aiText;
+          } else {
+            text = format.formatForecastWeekend(forecastData, cityDisplay);
+          }
+        } catch (_) {
+          text = format.formatForecastWeekend(forecastData, cityDisplay);
+        }
+      } else {
+        text = format.formatForecastWeekend(forecastData, cityDisplay);
+      }
+    } else {
+      text =
+        data === 'weather_week'
           ? format.formatForecastWeek(forecastData, cityDisplay)
           : format.formatForecast14Days(forecastData, cityDisplay);
+    }
     await telegram.sendMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
@@ -209,7 +227,7 @@ async function handleCallback(cq) {
     if (data === 'help') {
       await telegram.sendMessage(chatId, HELP_TEXT, { reply_markup: telegram.buildMainKeyboard() });
     } else {
-      await telegram.sendMessage(chatId, 'Головне меню:', { reply_markup: telegram.buildMainKeyboard() });
+      await telegram.sendMessage(chatId, 'Оберіть:', { reply_markup: telegram.buildMainKeyboard() });
     }
     return;
   }
@@ -227,7 +245,7 @@ async function handleMessage(msg) {
   if (text === '/start') {
     const user = await storage.getUser(telegramId);
     if (user.lat != null && user.lon != null) {
-      await telegram.sendMessage(chatId, 'Головне меню:', { reply_markup: telegram.buildMainKeyboard() });
+      await telegram.sendMessage(chatId, 'Оберіть:', { reply_markup: telegram.buildMainKeyboard() });
       return;
     }
     await state.setInputState(chatId, 'awaiting_city');
@@ -295,7 +313,7 @@ async function handleMessage(msg) {
     const local = weather.getLocalTimeStrings(offset);
     const weatherText = format.formatWeather(w, geo.displayName, local.time);
     await telegram.sendMessage(chatId, weatherText, { reply_markup: telegram.removeReplyKeyboard() });
-    await telegram.sendMessage(chatId, 'Головне меню:', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Оберіть:', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   if (inputState?.state === 'awaiting_morning_time') {
