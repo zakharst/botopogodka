@@ -374,19 +374,7 @@ async function actionOutfit(chatId, telegramId) {
   } else {
     outfitResult = fallback.getFallbackOutfit(ctx, user.profile);
   }
-  let explainResult;
-  if (ai.isAiAvailable()) {
-    try {
-      explainResult = await ai.getExplainAdvice(ctx, pl);
-    } catch (_) {
-      explainResult = fallback.getFallbackExplain(ctx, user.profile);
-    }
-  } else {
-    explainResult = fallback.getFallbackExplain(ctx, user.profile);
-  }
-  const explainText = explainResult.explanation || (explainResult.bullets && explainResult.bullets.length ? explainResult.bullets.join(' ') : '');
-  const adviceText = format.formatAdvice(outfitResult.bullets, outfitResult.explanation, pl);
-  const combinedText = explainText ? `${adviceText}\n\n${format.formatExplain(explainText)}` : adviceText;
-  await telegram.sendMessage(chatId, combinedText, { reply_markup: telegram.buildMainKeyboard() });
+  const text = format.formatAdvice(outfitResult.bullets, outfitResult.explanation, pl);
+  await telegram.sendMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
 }
 
