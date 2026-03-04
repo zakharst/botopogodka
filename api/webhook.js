@@ -108,6 +108,7 @@ async function handleCallback(cq) {
   if (data.startsWith('outfit:')) {
     const profile = data.replace('outfit:', '');
     if (PROFILES.includes(profile)) {
+      await telegram.sendMessage(chatId, 'Дзвоню на метеостанцію, зачекай хвильку ☎️');
       await storage.setUser(telegramId, { profile });
       await actionOutfit(chatId, telegramId);
     }
