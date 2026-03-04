@@ -11,7 +11,7 @@ import * as ai from '../lib/ai.js';
 import * as fallback from '../lib/fallback_advice.js';
 import { PROFILES } from '../lib/storage.js';
 
-const HELP_TEXT = `Формат міста: Місто, Країна. Погода — однією карткою. Поради щодо одягу — кнопка «Що вдягнути». В Налаштуваннях: профіль та час ранкового нагадування.`;
+const HELP_TEXT = `Формат міста: Місто, Країна. Погода — однією карткою. Поради щодо одягу — кнопка «Що вдягнути». В Налаштуваннях: місто, профіль, час нагадування.`;
 
 function parseTime(str) {
   const t = str.trim();
@@ -99,10 +99,10 @@ async function handleCallback(cq) {
     const user = await storage.getUser(telegramId);
     const keyboard = {
       inline_keyboard: PROFILES.map(p => [
-        { text: format.profileLabel(p) + (user.profile === p ? ' ✓' : ''), callback_data: `outfit:${p}` },
+        { text: format.profileLabelOutfit(p) + (user.profile === p ? ' ✓' : ''), callback_data: `outfit:${p}` },
       ]),
     };
-    await telegram.sendMessage(chatId, '🧥 Оберіть профіль для поради «Що вдягнути»:', { reply_markup: keyboard });
+    await telegram.sendMessage(chatId, 'Куди збираєшся?', { reply_markup: keyboard });
     return;
   }
   if (data.startsWith('outfit:')) {
@@ -111,10 +111,6 @@ async function handleCallback(cq) {
       await storage.setUser(telegramId, { profile });
       await actionOutfit(chatId, telegramId);
     }
-    return;
-  }
-  if (data === 'explain') {
-    await actionExplain(chatId, telegramId);
     return;
   }
   if (data === 'profile') {
@@ -262,15 +258,15 @@ async function handleMessage(msg) {
   if (text && normalizeOutfitTrigger(text) === 'що вдягнути') {
     const user = await storage.getUser(telegramId);
     if (user.lat == null || user.lon == null) {
-      await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: напишіть у форматі Місто, Країна або натисніть Місто в меню.', { reply_markup: telegram.buildMainKeyboard() });
+      await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: Налаштування → Місто або напишіть у форматі Місто, Країна.', { reply_markup: telegram.buildMainKeyboard() });
       return;
     }
     const keyboard = {
       inline_keyboard: PROFILES.map(p => [
-        { text: format.profileLabel(p) + (user.profile === p ? ' ✓' : ''), callback_data: `outfit:${p}` },
+        { text: format.profileLabelOutfit(p) + (user.profile === p ? ' ✓' : ''), callback_data: `outfit:${p}` },
       ]),
     };
-    await telegram.sendMessage(chatId, '🧥 Оберіть профіль для поради «Що вдягнути»:', { reply_markup: keyboard });
+    await telegram.sendMessage(chatId, 'Куди збираєшся?', { reply_markup: keyboard });
     return;
   }
 
@@ -319,7 +315,7 @@ async function handleMessage(msg) {
 async function actionWeather(chatId, telegramId) {
   const user = await storage.getUser(telegramId);
   if (user.lat == null || user.lon == null) {
-    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: напишіть у форматі Місто, Країна або натисніть Місто в меню.', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: Налаштування → Місто або напишіть у форматі Місто, Країна.', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   let w;
@@ -357,7 +353,7 @@ async function getWeatherContext(user) {
 async function actionOutfit(chatId, telegramId) {
   const user = await storage.getUser(telegramId);
   if (user.lat == null || user.lon == null) {
-    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: напишіть у форматі Місто, Країна або натисніть Місто в меню.', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: Налаштування → Місто або напишіть у форматі Місто, Країна.', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   let ctx;
@@ -368,44 +364,29 @@ async function actionOutfit(chatId, telegramId) {
     return;
   }
   const pl = format.profileLabel(user.profile);
-  let result;
+  let outfitResult;
   if (ai.isAiAvailable()) {
     try {
-      result = await ai.getOutfitAdvice(ctx, pl);
+      outfitResult = await ai.getOutfitAdvice(ctx, pl);
     } catch (_) {
-      result = fallback.getFallbackOutfit(ctx, user.profile);
+      outfitResult = fallback.getFallbackOutfit(ctx, user.profile);
     }
   } else {
-    result = fallback.getFallbackOutfit(ctx, user.profile);
+    outfitResult = fallback.getFallbackOutfit(ctx, user.profile);
   }
-  const text = format.formatAdvice(result.bullets, result.explanation, pl);
-  await telegram.sendMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
+  let explainResult;
+  if (ai.isAiAvailable()) {
+    try {
+      explainResult = await ai.getExplainAdvice(ctx, pl);
+    } catch (_) {
+      explainResult = fallback.getFallbackExplain(ctx, user.profile);
+    }
+  } else {
+    explainResult = fallback.getFallbackExplain(ctx, user.profile);
+  }
+  const explainText = explainResult.explanation || (explainResult.bullets && explainResult.bullets.length ? explainResult.bullets.join(' ') : '');
+  const adviceText = format.formatAdvice(outfitResult.bullets, outfitResult.explanation, pl);
+  const combinedText = explainText ? `${adviceText}\n\n${format.formatExplain(explainText)}` : adviceText;
+  await telegram.sendMessage(chatId, combinedText, { reply_markup: telegram.buildMainKeyboard() });
 }
 
-async function actionExplain(chatId, telegramId) {
-  const user = await storage.getUser(telegramId);
-  if (user.lat == null || user.lon == null) {
-    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: напишіть у форматі Місто, Країна або натисніть Місто в меню.', { reply_markup: telegram.buildMainKeyboard() });
-    return;
-  }
-  let ctx;
-  try {
-    ctx = await getWeatherContext({ ...user, telegramId });
-  } catch (e) {
-    await telegram.sendMessage(chatId, 'Зараз не можу отримати погоду. Спробуйте пізніше.');
-    return;
-  }
-  const pl = format.profileLabel(user.profile);
-  let result;
-  if (ai.isAiAvailable()) {
-    try {
-      result = await ai.getExplainAdvice(ctx, pl);
-    } catch (_) {
-      result = fallback.getFallbackExplain(ctx, user.profile);
-    }
-  } else {
-    result = fallback.getFallbackExplain(ctx, user.profile);
-  }
-  const text = format.formatExplain(result.explanation || result.bullets.join(' '));
-  await telegram.sendMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
-}
