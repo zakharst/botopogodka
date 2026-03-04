@@ -11,7 +11,7 @@ import * as ai from '../lib/ai.js';
 import * as fallback from '../lib/fallback_advice.js';
 import { PROFILES } from '../lib/storage.js';
 
-const HELP_TEXT = `Місто вводьте у форматі: Місто, Країна (наприклад: Тернопіль, Україна). Після цього отримаєте повний прогноз одним повідомленням. Поради щодо одягу — окремо: напишіть «що вдягнути» або натисніть кнопку в меню. В Налаштуваннях: профіль та час ранкового нагадування (07:30 за вашим часом).`;
+const HELP_TEXT = `Формат міста: Місто, Країна. Погода — однією карткою. Поради щодо одягу — кнопка «Що вдягнути». В Налаштуваннях: профіль та час ранкового нагадування.`;
 
 function parseTime(str) {
   const t = str.trim();
@@ -84,6 +84,13 @@ async function handleCallback(cq) {
 
   await telegram.answerCallbackQuery(cq.id, {});
 
+  if (data === 'restart') {
+    await storage.clearUser(telegramId);
+    await state.clearInputState(chatId);
+    const keyboard = { inline_keyboard: [[{ text: '📍 Ввести місто', callback_data: 'city' }]] };
+    await telegram.sendMessage(chatId, 'Привіт 👋\n\nБудь ласка, введіть місто у форматі: Місто, Країна. Так ми уникнемо плутанини між містами з однаковою назвою.\n\nНаприклад: Тернопіль, Україна', { reply_markup: keyboard });
+    return;
+  }
   if (data === 'weather') {
     await actionWeather(chatId, telegramId);
     return;
@@ -255,7 +262,7 @@ async function handleMessage(msg) {
   if (text && normalizeOutfitTrigger(text) === 'що вдягнути') {
     const user = await storage.getUser(telegramId);
     if (user.lat == null || user.lon == null) {
-      await telegram.sendMessage(chatId, 'Будь ласка, спочатку вкажіть місто (напишіть його або натисніть «📍 Місто»).', { reply_markup: telegram.buildMainKeyboard() });
+      await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: напишіть у форматі Місто, Країна або натисніть Місто в меню.', { reply_markup: telegram.buildMainKeyboard() });
       return;
     }
     const keyboard = {
@@ -306,13 +313,13 @@ async function handleMessage(msg) {
     return;
   }
 
-  await telegram.sendMessage(chatId, 'Оберіть пункт у меню нижче або натисніть /start.', { reply_markup: telegram.buildMainKeyboard() });
+  await telegram.sendMessage(chatId, 'Не розумію. Оберіть кнопку в меню або /start.', { reply_markup: telegram.buildMainKeyboard() });
 }
 
 async function actionWeather(chatId, telegramId) {
   const user = await storage.getUser(telegramId);
   if (user.lat == null || user.lon == null) {
-    await telegram.sendMessage(chatId, 'Будь ласка, спочатку вкажіть місто (напишіть його або натисніть «📍 Місто»).', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: напишіть у форматі Місто, Країна або натисніть Місто в меню.', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   let w;
@@ -350,7 +357,7 @@ async function getWeatherContext(user) {
 async function actionOutfit(chatId, telegramId) {
   const user = await storage.getUser(telegramId);
   if (user.lat == null || user.lon == null) {
-    await telegram.sendMessage(chatId, 'Будь ласка, спочатку вкажіть місто (напишіть його або натисніть «📍 Місто»).', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: напишіть у форматі Місто, Країна або натисніть Місто в меню.', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   let ctx;
@@ -378,7 +385,7 @@ async function actionOutfit(chatId, telegramId) {
 async function actionExplain(chatId, telegramId) {
   const user = await storage.getUser(telegramId);
   if (user.lat == null || user.lon == null) {
-    await telegram.sendMessage(chatId, 'Будь ласка, спочатку вкажіть місто (напишіть його або натисніть «📍 Місто»).', { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: напишіть у форматі Місто, Країна або натисніть Місто в меню.', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   let ctx;
