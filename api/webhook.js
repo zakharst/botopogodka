@@ -64,9 +64,10 @@ export default async function handler(req, res) {
     } else if (update.message) {
       await handleMessage(update.message);
     }
-    if (!skipDuplicateCheck) {
+    // Завжди намагаємось зберегти update_id, щоб повторні запити (ретраї) не дублювали повідомлення
+    try {
       await storage.setLastProcessedUpdateId(updateId);
-    }
+    } catch (_) {}
   } catch (err) {
     console.error('Webhook handler:', err);
     const chatId = update.callback_query?.message?.chat?.id ?? update.message?.chat?.id;
@@ -437,15 +438,16 @@ async function actionOutfit(chatId, telegramId) {
     return;
   }
   const pl = format.profileLabel(user.profile);
+  const ctxWithProfile = { ...ctx, profile: user.profile };
   let outfitResult;
   if (ai.isAiAvailable()) {
     try {
-      outfitResult = await ai.getOutfitAdvice(ctx, pl);
+      outfitResult = await ai.getOutfitAdvice(ctxWithProfile, pl);
     } catch (_) {
-      outfitResult = fallback.getFallbackOutfit(ctx, user.profile);
+      outfitResult = fallback.getFallbackOutfit(ctxWithProfile, user.profile);
     }
   } else {
-    outfitResult = fallback.getFallbackOutfit(ctx, user.profile);
+    outfitResult = fallback.getFallbackOutfit(ctxWithProfile, user.profile);
   }
   const text = format.formatAdvice(outfitResult.bullets, outfitResult.explanation, pl);
   await telegram.sendMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });

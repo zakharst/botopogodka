@@ -96,6 +96,7 @@ async function sendAutopost(user) {
     cityDisplay: user.cityDisplay,
     city: user.city,
     localTime: local.time,
+    profile: user.profile,
   };
   const pl = format.profileLabel(user.profile);
   let advice;
@@ -103,10 +104,10 @@ async function sendAutopost(user) {
     try {
       advice = await ai.getOutfitAdvice(context, pl);
     } catch (_) {
-      advice = fallback.getFallbackOutfit(ctx, user.profile);
+      advice = fallback.getFallbackOutfit(context, user.profile);
     }
   } else {
-    advice = fallback.getFallbackOutfit(ctx, user.profile);
+    advice = fallback.getFallbackOutfit(context, user.profile);
   }
   const adviceText = format.formatAdvice(advice.bullets, advice.explanation, pl);
 
