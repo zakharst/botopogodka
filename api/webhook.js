@@ -41,6 +41,7 @@ export default async function handler(req, res) {
     res.status(200).json({ ok: true });
     return;
   }
+  let skipDuplicateCheck = false;
   try {
     let lastId = await storage.getLastProcessedUpdateId();
     if (lastId > 900000000) {
@@ -53,8 +54,8 @@ export default async function handler(req, res) {
     }
   } catch (e) {
     console.error('Redis update_id:', e);
-    res.status(200).json({ ok: true });
-    return;
+    skipDuplicateCheck = true;
+    // Продовжуємо обробку, щоб бот хоча б відповів (без ідемпотентності)
   }
 
   try {
@@ -63,7 +64,9 @@ export default async function handler(req, res) {
     } else if (update.message) {
       await handleMessage(update.message);
     }
-    await storage.setLastProcessedUpdateId(updateId);
+    if (!skipDuplicateCheck) {
+      await storage.setLastProcessedUpdateId(updateId);
+    }
   } catch (err) {
     console.error('Webhook handler:', err);
     const chatId = update.callback_query?.message?.chat?.id ?? update.message?.chat?.id;
