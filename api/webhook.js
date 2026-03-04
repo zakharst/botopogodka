@@ -87,12 +87,44 @@ async function handleCallback(cq) {
   if (data === 'restart') {
     await storage.clearUser(telegramId);
     await state.clearInputState(chatId);
-    const keyboard = { inline_keyboard: [[{ text: '📍 Ввести місто', callback_data: 'city' }]] };
-    await telegram.sendMessage(chatId, 'Привіт 👋\n\nБудь ласка, введіть місто у форматі: Місто, Країна. Так ми уникнемо плутанини між містами з однаковою назвою.\n\nНаприклад: Тернопіль, Україна', { reply_markup: keyboard });
+    await state.setInputState(chatId, 'awaiting_city');
+    const cityPrompt = 'Введіть місто (Місто, Країна) або натисніть кнопку й поділіться геолокацією.\n\nНаприклад: Тернопіль, Україна';
+    await telegram.sendMessage(chatId, cityPrompt, { reply_markup: telegram.buildLocationRequestKeyboard() });
     return;
   }
   if (data === 'weather') {
     await actionWeather(chatId, telegramId);
+    return;
+  }
+  if (data === 'weather_later') {
+    await telegram.sendMessage(
+      chatId,
+      'Оберіть період прогнозу:',
+      { reply_markup: telegram.buildWeatherLaterKeyboard() },
+    );
+    return;
+  }
+  if (data === 'weather_weekend' || data === 'weather_week' || data === 'weather_14days') {
+    const user = await storage.getUser(telegramId);
+    if (user.lat == null || user.lon == null) {
+      await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: Налаштування → Місто.', { reply_markup: telegram.buildMainKeyboard() });
+      return;
+    }
+    let forecastData;
+    try {
+      forecastData = await weather.getForecastDays(user.lat, user.lon);
+    } catch (e) {
+      await telegram.sendMessage(chatId, 'Зараз не можу завантажити прогноз. Спробуйте пізніше.', { reply_markup: telegram.buildMainKeyboard() });
+      return;
+    }
+    const cityDisplay = user.cityDisplay || null;
+    const text =
+      data === 'weather_weekend'
+        ? format.formatForecastWeekend(forecastData, cityDisplay)
+        : data === 'weather_week'
+          ? format.formatForecastWeek(forecastData, cityDisplay)
+          : format.formatForecast14Days(forecastData, cityDisplay);
+    await telegram.sendMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   if (data === 'outfit') {
@@ -132,7 +164,8 @@ async function handleCallback(cq) {
   }
   if (data === 'city') {
     await state.setInputState(chatId, 'awaiting_city');
-    await telegram.sendMessage(chatId, 'Введіть місто у форматі: Місто, Країна.\n\nНаприклад: Тернопіль, Україна або Warsaw, Poland');
+    const cityPrompt = 'Введіть місто у форматі Місто, Країна або натисніть кнопку й поділіться геолокацією.\n\nНаприклад: Тернопіль, Україна';
+    await telegram.sendMessage(chatId, cityPrompt, { reply_markup: telegram.buildLocationRequestKeyboard() });
     return;
   }
   if (data === 'time_settings') {
@@ -192,8 +225,9 @@ async function handleMessage(msg) {
       await telegram.sendMessage(chatId, 'Головне меню:', { reply_markup: telegram.buildMainKeyboard() });
       return;
     }
-    const keyboard = { inline_keyboard: [[{ text: '📍 Ввести місто', callback_data: 'city' }]] };
-    await telegram.sendMessage(chatId, 'Привіт 👋\n\nБудь ласка, введіть місто у форматі: Місто, Країна. Так ми уникнемо плутанини між містами з однаковою назвою.\n\nНаприклад: Тернопіль, Україна', { reply_markup: keyboard });
+    await state.setInputState(chatId, 'awaiting_city');
+    const cityPrompt = 'Привіт 👋\n\nВведіть місто (Місто, Країна) або натисніть кнопку й поділіться геолокацією.\n\nНаприклад: Тернопіль, Україна';
+    await telegram.sendMessage(chatId, cityPrompt, { reply_markup: telegram.buildLocationRequestKeyboard() });
     return;
   }
   if (text === '/help') {
@@ -204,20 +238,34 @@ async function handleMessage(msg) {
   const inputState = await state.getInputState(chatId);
   if (inputState?.state === 'awaiting_city') {
     await state.clearInputState(chatId);
-    if (!text) {
-      await telegram.sendMessage(chatId, 'Місто не вказано. Спробуйте ще раз або /start.');
-      return;
-    }
-    let geo;
-    try {
-      geo = await weather.geocode(text);
-    } catch (e) {
-      await telegram.sendMessage(chatId, 'Зараз не можу перевірити місто. Спробуйте пізніше.');
-      return;
-    }
-    if (!geo) {
-      await telegram.sendMessage(chatId, 'Не знайшов такого міста. Спробуйте ще раз у форматі «місто, країна».');
-      return;
+    const location = msg.location;
+    let geo = null;
+    if (location?.latitude != null && location?.longitude != null) {
+      try {
+        geo = await weather.reverseGeocode(location.latitude, location.longitude);
+      } catch (e) {
+        await telegram.sendMessage(chatId, 'Зараз не можу визначити місто за координатами. Спробуйте ввести назву вручну.');
+        return;
+      }
+      if (!geo) {
+        await telegram.sendMessage(chatId, 'Не вдалося визначити місто за цими координатами. Введіть місто вручну (Місто, Країна).');
+        return;
+      }
+    } else {
+      if (!text) {
+        await telegram.sendMessage(chatId, 'Місто не вказано. Введіть назву (Місто, Країна) або поділіться геолокацією.');
+        return;
+      }
+      try {
+        geo = await weather.geocode(text);
+      } catch (e) {
+        await telegram.sendMessage(chatId, 'Зараз не можу перевірити місто. Спробуйте пізніше.');
+        return;
+      }
+      if (!geo) {
+        await telegram.sendMessage(chatId, 'Не знайшов такого міста. Спробуйте ще раз у форматі «місто, країна».');
+        return;
+      }
     }
     let timezoneOffsetSeconds = null;
     try {
@@ -241,7 +289,8 @@ async function handleMessage(msg) {
     const offset = timezoneOffsetSeconds ?? w.timezoneOffsetSeconds ?? 0;
     const local = weather.getLocalTimeStrings(offset);
     const weatherText = format.formatWeather(w, geo.displayName, local.time);
-    await telegram.sendMessage(chatId, weatherText, { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendMessage(chatId, weatherText, { reply_markup: telegram.removeReplyKeyboard() });
+    await telegram.sendMessage(chatId, 'Головне меню:', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   if (inputState?.state === 'awaiting_morning_time') {
