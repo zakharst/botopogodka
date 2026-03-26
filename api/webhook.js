@@ -163,7 +163,7 @@ async function handleCallback(cq) {
           ? format.formatForecastWeek(forecastData, cityDisplay)
           : format.formatForecast14Days(forecastData, cityDisplay);
     }
-    await telegram.sendMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
+    await telegram.sendLongMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   if (data === 'outfit') {
