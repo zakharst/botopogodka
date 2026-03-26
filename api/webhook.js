@@ -16,6 +16,10 @@ const HELP_TEXT = `Формат міста: Місто, Країна. Погод
 
 const WEATHER_WAIT_MSG = 'Дзвоню на метеостанцію, зачекай хвильку ☎️';
 
+/** Після вибору вихідні / тиждень / 2 тижні — два провайдери, довший відповідь. */
+const WEATHER_WAIT_MSG_MULTI_DAY =
+  `${WEATHER_WAIT_MSG}\n\nЗачекайте на лінії — прогноз на тиждень і далі збираємо довше, це займе ще трішки часу.`;
+
 function parseTime(str) {
   const t = str.trim();
   const m = t.match(/^(\d{1,2}):(\d{2})$/);
@@ -130,7 +134,7 @@ async function handleCallback(cq) {
       await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: Налаштування → Місто.', { reply_markup: telegram.buildMainKeyboard() });
       return;
     }
-    await telegram.sendMessage(chatId, WEATHER_WAIT_MSG);
+    await telegram.sendMessage(chatId, WEATHER_WAIT_MSG_MULTI_DAY);
     let forecastData;
     try {
       forecastData = await weather.getForecastDays(user.lat, user.lon);
