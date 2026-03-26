@@ -11,10 +11,12 @@ import * as ai from '../lib/ai.js';
 import * as fallback from '../lib/fallback_advice.js';
 import * as analytics from '../lib/analytics.js';
 import {
+  WARM_WINDOW_FACTS_HEADING,
   WARM_WINDOW_HEADER,
   formatWarmWindowBodyHtml,
   formatWarmWindowDataForAi,
   formatWarmWindowMessage,
+  formatWarmWindowScopeHtml,
 } from '../lib/warm_window.js';
 import { PROFILES } from '../lib/storage.js';
 
@@ -162,13 +164,14 @@ async function handleCallback(cq) {
     const cityDisplay = user.cityDisplay || null;
     let text;
     if (data === 'weather_warm_when') {
-      const warmBodyHtml = formatWarmWindowBodyHtml(forecastData);
-      if (warmBodyHtml && ai.isAiAvailable()) {
+      const warmScopeHtml = formatWarmWindowScopeHtml(forecastData);
+      const warmFactsHtml = formatWarmWindowBodyHtml(forecastData);
+      if (warmFactsHtml && ai.isAiAvailable()) {
         try {
           const warmCtx = formatWarmWindowDataForAi(forecastData, cityDisplay);
           const warmNarr = await ai.getWarmWhenNarrative(warmCtx);
-          if (warmNarr) {
-            text = `${WARM_WINDOW_HEADER}${format.escapeHtml(warmNarr.trim())}\n\n${warmBodyHtml}`;
+          if (warmNarr && warmScopeHtml) {
+            text = `${WARM_WINDOW_HEADER}${warmScopeHtml}\n\n${format.escapeHtml(warmNarr.trim())}\n\n${WARM_WINDOW_FACTS_HEADING}\n\n${warmFactsHtml}`;
           } else {
             text = formatWarmWindowMessage(forecastData);
           }
