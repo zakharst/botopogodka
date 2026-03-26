@@ -133,7 +133,7 @@ async function handleCallback(cq) {
       const weekendDays = format.getWeekendDays(forecastData);
       if (weekendDays.length > 0 && ai.isAiAvailable()) {
         try {
-          const dataText = format.formatWeekendDataForAi(weekendDays, cityDisplay, forecastData.timezoneOffsetSeconds ?? 0);
+          const dataText = format.formatWeekendDataForAi(weekendDays, cityDisplay);
           const aiText = await ai.getWeekendForecastSummary(dataText);
           if (aiText) {
             text = format.getWeekendForecastHeader(cityDisplay) + aiText;
