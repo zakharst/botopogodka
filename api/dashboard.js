@@ -70,6 +70,23 @@ function renderDashboard(snapshot) {
     .map((p) => `<tr><td>${esc(p.label)}</td><td class="num"><code>${esc(p.k)}</code></td><td class="num">${p.n}</td></tr>`)
     .join('');
 
+  const userTableRows = (snapshot.userRows || [])
+    .map((r) => {
+      const name = r.displayName ? esc(r.displayName) : '<span style="color:var(--muted)">—</span>';
+      const un =
+        r.tgUsername != null && r.tgUsername !== ''
+          ? `<a href="https://t.me/${esc(r.tgUsername)}" target="_blank" rel="noopener" style="color:var(--accent)">@${esc(r.tgUsername)}</a>`
+          : '<span style="color:var(--muted)">—</span>';
+      const city =
+        r.cityDisplay != null && r.cityDisplay !== ''
+          ? esc(r.cityDisplay)
+          : '<span style="color:var(--muted)">—</span>';
+      const loc = r.hasLocation ? '✓' : '—';
+      const ap = r.autopostMorning ? '✓' : '—';
+      return `<tr><td class="num"><code>${esc(r.telegramId)}</code></td><td>${name}</td><td>${un}</td><td>${city}</td><td>${esc(profileLabel(r.profile))}</td><td class="num">${loc}</td><td class="num">${ap}</td></tr>`;
+    })
+    .join('');
+
   return `<!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -95,6 +112,9 @@ function renderDashboard(snapshot) {
     td.num { text-align: right; font-variant-numeric: tabular-nums; }
     code { font-size: 0.8em; background: #141c28; padding: 0.12rem 0.35rem; border-radius: 4px; }
     .note { color: var(--muted); font-size: 0.8rem; margin-top: 1rem; max-width: 42rem; }
+    .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .scroll table { min-width: 640px; }
+    a { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -102,10 +122,21 @@ function renderDashboard(snapshot) {
   <p class="sub">Оновлено: ${esc(snapshot.generatedAt)} · Унікальні активні (UAU за день) — за UTC-датою</p>
   <div class="grid">
     <div class="card"><div class="val">${snapshot.totalUsers}</div><div class="lbl">Записів користувачів (user:*)</div></div>
+    <div class="card"><div class="val">${snapshot.usersWithName ?? 0}</div><div class="lbl">З іменем у базі (після останнього апдейту)</div></div>
     <div class="card"><div class="val">${snapshot.usersWithLocation}</div><div class="lbl">З містом / координатами</div></div>
     <div class="card"><div class="val">${snapshot.autopostMorningUsers}</div><div class="lbl">Ранкове нагадування увімкнено</div></div>
     <div class="card"><div class="val">${snapshot.totalEvents}</div><div class="lbl">Усього зафіксованих подій</div></div>
   </div>
+  <section>
+    <h2>Користувачі</h2>
+    <p class="note" style="margin-top:0;margin-bottom:0.75rem">Ім'я та @username з'являються після будь-якого повідомлення або натискання кнопки (дані з Telegram). Старі записи без імені оновляться при наступній взаємодії.</p>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Telegram ID</th><th>Ім'я</th><th>Username</th><th>Місто</th><th>Профіль</th><th>Локація</th><th>Ранок</th></tr></thead>
+      <tbody>${userTableRows || '<tr><td colspan="7" style="color:var(--muted)">Немає записів</td></tr>'}</tbody>
+    </table>
+    </div>
+  </section>
   <section>
     <h2>Найчастіші дії</h2>
     <table>
