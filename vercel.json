@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "functions": {
+    "api/broadcast_experiment.js": {
+      "maxDuration": 300
+    }
+  },
   "builds": [
     {
       "src": "api/**/*.js",
@@ -9,12 +14,21 @@
   "routes": [
     { "src": "/dashboard", "dest": "/api/dashboard.js" },
     { "src": "/api/webhook", "dest": "/api/webhook.js" },
-    { "src": "/api/tick", "dest": "/api/tick.js" }
+    { "src": "/api/tick", "dest": "/api/tick.js" },
+    { "src": "/api/broadcast_experiment", "dest": "/api/broadcast_experiment.js" }
   ],
   "crons": [
     {
       "path": "/api/tick",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/broadcast_experiment",
+      "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/broadcast_experiment",
+      "schedule": "0 21 * * *"
     }
   ]
 }
