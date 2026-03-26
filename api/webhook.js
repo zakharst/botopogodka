@@ -9,6 +9,7 @@ import * as weather from '../lib/weather.js';
 import * as format from '../lib/format.js';
 import * as ai from '../lib/ai.js';
 import * as fallback from '../lib/fallback_advice.js';
+import * as analytics from '../lib/analytics.js';
 import { PROFILES } from '../lib/storage.js';
 
 const HELP_TEXT = `Формат міста: Місто, Країна. Погода — однією карткою. Поради щодо одягу — кнопка «Що вдягнути». В Налаштуваннях: місто, профіль, час нагадування.`;
@@ -93,6 +94,7 @@ async function handleCallback(cq) {
   await telegram.answerCallbackQuery(cq.id, {});
 
   if (data === 'restart') {
+    void analytics.recordEvent(telegramId, 'restart');
     await storage.clearUser(telegramId);
     await state.clearInputState(chatId);
     await state.setInputState(chatId, 'awaiting_city');
@@ -101,11 +103,13 @@ async function handleCallback(cq) {
     return;
   }
   if (data === 'weather') {
+    void analytics.recordEvent(telegramId, 'weather_now');
     await telegram.sendMessage(chatId, WEATHER_WAIT_MSG);
     await actionWeather(chatId, telegramId);
     return;
   }
   if (data === 'weather_later') {
+    void analytics.recordEvent(telegramId, 'forecast_menu');
     await telegram.sendMessage(
       chatId,
       'Оберіть період прогнозу:',
@@ -114,6 +118,9 @@ async function handleCallback(cq) {
     return;
   }
   if (data === 'weather_weekend' || data === 'weather_week' || data === 'weather_14days') {
+    if (data === 'weather_weekend') void analytics.recordEvent(telegramId, 'forecast_weekend');
+    else if (data === 'weather_week') void analytics.recordEvent(telegramId, 'forecast_week');
+    else void analytics.recordEvent(telegramId, 'forecast_14d');
     const user = await storage.getUser(telegramId);
     if (user.lat == null || user.lon == null) {
       await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: Налаштування → Місто.', { reply_markup: telegram.buildMainKeyboard() });
@@ -156,6 +163,7 @@ async function handleCallback(cq) {
     return;
   }
   if (data === 'outfit') {
+    void analytics.recordEvent(telegramId, 'outfit_menu');
     const user = await storage.getUser(telegramId);
     const keyboard = {
       inline_keyboard: PROFILES.map(p => [
@@ -175,6 +183,7 @@ async function handleCallback(cq) {
     return;
   }
   if (data === 'profile') {
+    void analytics.recordEvent(telegramId, 'profile_menu');
     const user = await storage.getUser(telegramId);
     const keyboard = {
       inline_keyboard: PROFILES.map(p => [{ text: format.profileLabel(p) + (user.profile === p ? ' ✓' : ''), callback_data: `profile:${p}` }]),
@@ -185,18 +194,21 @@ async function handleCallback(cq) {
   if (data.startsWith('profile:')) {
     const profile = data.replace('profile:', '');
     if (PROFILES.includes(profile)) {
+      void analytics.recordEvent(telegramId, 'profile_set');
       await storage.setUser(telegramId, { profile });
       await telegram.sendMessage(chatId, `Профіль змінено на «${format.profileLabel(profile)}».`, { reply_markup: telegram.buildMainKeyboard() });
     }
     return;
   }
   if (data === 'city') {
+    void analytics.recordEvent(telegramId, 'city_flow_start');
     await state.setInputState(chatId, 'awaiting_city');
     const cityPrompt = 'Введіть місто у форматі Місто, Країна або натисніть кнопку й поділіться геолокацією.\n\nНаприклад: Тернопіль, Україна';
     await telegram.sendMessage(chatId, cityPrompt, { reply_markup: telegram.buildLocationRequestKeyboard() });
     return;
   }
   if (data === 'time_settings') {
+    void analytics.recordEvent(telegramId, 'time_settings');
     const user = await storage.getUser(telegramId);
     const keyboard = {
       inline_keyboard: [
@@ -209,29 +221,35 @@ async function handleCallback(cq) {
     return;
   }
   if (data === 'time_morning_on') {
+    void analytics.recordEvent(telegramId, 'autopost_on');
     await storage.setUser(telegramId, { autopostMorning: true });
     const user = await storage.getUser(telegramId);
     await telegram.sendMessage(chatId, 'Ранкове нагадування увімкнено о ' + (user.morningTime || '07:30') + ' за місцевим часом.', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   if (data === 'time_morning_off') {
+    void analytics.recordEvent(telegramId, 'autopost_off');
     await storage.setUser(telegramId, { autopostMorning: false });
     await telegram.sendMessage(chatId, 'Ранкове нагадування вимкнено.', { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
   if (data === 'time_set_morning') {
+    void analytics.recordEvent(telegramId, 'time_prompt');
     await state.setInputState(chatId, 'awaiting_morning_time');
     await telegram.sendMessage(chatId, 'Введіть час нагадування у форматі ГГ:ХХ (наприклад 07:30):');
     return;
   }
   if (data === 'settings') {
+    void analytics.recordEvent(telegramId, 'settings_open');
     await telegram.sendMessage(chatId, '⚙ Налаштування:', { reply_markup: telegram.buildSettingsKeyboard() });
     return;
   }
   if (data === 'back_menu' || data === 'help') {
     if (data === 'help') {
+      void analytics.recordEvent(telegramId, 'help_callback');
       await telegram.sendMessage(chatId, HELP_TEXT, { reply_markup: telegram.buildMainKeyboard() });
     } else {
+      void analytics.recordEvent(telegramId, 'back_menu');
       await telegram.sendMessage(chatId, 'Оберіть:', { reply_markup: telegram.buildMainKeyboard() });
     }
     return;
@@ -248,6 +266,7 @@ async function handleMessage(msg) {
   const text = (msg.text || '').trim();
 
   if (text === '/start') {
+    void analytics.recordEvent(telegramId, 'start');
     const user = await storage.getUser(telegramId);
     if (user.lat != null && user.lon != null) {
       await telegram.sendMessage(chatId, 'Оберіть:', { reply_markup: telegram.buildMainKeyboard() });
@@ -259,6 +278,7 @@ async function handleMessage(msg) {
     return;
   }
   if (text === '/help') {
+    void analytics.recordEvent(telegramId, 'help');
     await telegram.sendMessage(chatId, HELP_TEXT, { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
@@ -308,6 +328,7 @@ async function handleMessage(msg) {
       lon: geo.lon,
       timezoneOffsetSeconds,
     });
+    void analytics.recordEvent(telegramId, 'city_set');
     let w;
     try {
       w = await weather.getOneCall(geo.lat, geo.lon);
@@ -330,11 +351,13 @@ async function handleMessage(msg) {
       return;
     }
     await storage.setUser(telegramId, { morningTime: parsed });
+    void analytics.recordEvent(telegramId, 'morning_time_set');
     await telegram.sendMessage(chatId, `Час нагадування встановлено: ${parsed}.`, { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
 
   if (text && normalizeOutfitTrigger(text) === 'що вдягнути') {
+    void analytics.recordEvent(telegramId, 'outfit_trigger_text');
     const user = await storage.getUser(telegramId);
     if (user.lat == null || user.lon == null) {
       await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: Налаштування → Місто або напишіть у форматі Місто, Країна.', { reply_markup: telegram.buildMainKeyboard() });
@@ -375,6 +398,7 @@ async function handleMessage(msg) {
       lon: geo.lon,
       timezoneOffsetSeconds,
     });
+    void analytics.recordEvent(telegramId, 'city_text_weather');
     let w;
     try {
       w = await weather.getOneCall(geo.lat, geo.lon);
@@ -457,5 +481,6 @@ async function actionOutfit(chatId, telegramId) {
   }
   const text = format.formatAdvice(outfitResult.bullets, outfitResult.explanation, pl);
   await telegram.sendMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
+  void analytics.recordEvent(telegramId, 'outfit_advice');
 }
 

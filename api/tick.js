@@ -10,6 +10,7 @@ import * as weather from '../lib/weather.js';
 import * as format from '../lib/format.js';
 import * as ai from '../lib/ai.js';
 import * as fallback from '../lib/fallback_advice.js';
+import * as analytics from '../lib/analytics.js';
 
 const WINDOW_MINUTES = 5;
 
@@ -58,6 +59,7 @@ export default async function handler(req, res) {
           try {
             await sendAutopost(user);
             await storage.setUser(user.telegramId, { lastSentMorningDate: today });
+            void analytics.recordEvent(user.telegramId, 'autopost_sent');
             sent++;
           } catch (e) {
             console.error('tick morning', user.telegramId, e);

@@ -7,6 +7,7 @@
     }
   ],
   "routes": [
+    { "src": "/dashboard", "dest": "/api/dashboard.js" },
     { "src": "/api/webhook", "dest": "/api/webhook.js" },
     { "src": "/api/tick", "dest": "/api/tick.js" }
   ],
