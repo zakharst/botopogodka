@@ -10,6 +10,7 @@ import * as format from '../lib/format.js';
 import * as ai from '../lib/ai.js';
 import * as fallback from '../lib/fallback_advice.js';
 import * as analytics from '../lib/analytics.js';
+import { formatWarmWindowMessage } from '../lib/warm_window.js';
 import { PROFILES } from '../lib/storage.js';
 
 const HELP_TEXT = `Формат міста: Місто, Країна. Погода — однією карткою. Поради щодо одягу — кнопка «Що вдягнути». В Налаштуваннях: місто, профіль, час нагадування.`;
@@ -125,10 +126,11 @@ async function handleCallback(cq) {
     );
     return;
   }
-  if (data === 'weather_weekend' || data === 'weather_week' || data === 'weather_14days') {
+  if (data === 'weather_weekend' || data === 'weather_week' || data === 'weather_14days' || data === 'weather_warm_when') {
     if (data === 'weather_weekend') void analytics.recordEvent(telegramId, 'forecast_weekend');
     else if (data === 'weather_week') void analytics.recordEvent(telegramId, 'forecast_week');
-    else void analytics.recordEvent(telegramId, 'forecast_14d');
+    else if (data === 'weather_14days') void analytics.recordEvent(telegramId, 'forecast_14d');
+    else void analytics.recordEvent(telegramId, 'forecast_warm_when');
     const user = await storage.getUser(telegramId);
     if (user.lat == null || user.lon == null) {
       await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: Налаштування → Місто.', { reply_markup: telegram.buildMainKeyboard() });
@@ -144,7 +146,9 @@ async function handleCallback(cq) {
     }
     const cityDisplay = user.cityDisplay || null;
     let text;
-    if (data === 'weather_weekend') {
+    if (data === 'weather_warm_when') {
+      text = formatWarmWindowMessage(forecastData, cityDisplay);
+    } else if (data === 'weather_weekend') {
       const weekendDays = format.getWeekendDays(forecastData);
       if (weekendDays.length > 0 && ai.isAiAvailable()) {
         try {

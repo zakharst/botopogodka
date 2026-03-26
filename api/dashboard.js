@@ -32,6 +32,7 @@ const EVENT_LABELS = {
   help_callback: 'Допомога (кнопка)',
   restart: 'Рестарт (/start з нуля)',
   autopost_sent: 'Ранковий автопост (cron)',
+  forecast_warm_when: 'Коли потепліє (експеримент)',
 };
 
 function esc(s) {
