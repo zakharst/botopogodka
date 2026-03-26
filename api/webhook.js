@@ -62,6 +62,10 @@ export default async function handler(req, res) {
   }
 
   try {
+    const from = update.callback_query?.from ?? update.message?.from;
+    if (from?.id != null && !from.is_bot) {
+      await storage.mergeTelegramProfile(String(from.id), from);
+    }
     if (update.callback_query) {
       await handleCallback(update.callback_query);
     } else if (update.message) {
