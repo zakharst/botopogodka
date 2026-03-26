@@ -17,9 +17,13 @@ const HELP_TEXT = `Формат міста: Місто, Країна. Погод
 
 const WEATHER_WAIT_MSG = 'Дзвоню на метеостанцію, зачекай хвильку ☎️';
 
-/** Після вибору вихідні / тиждень / 2 тижні — два провайдери, довший відповідь. */
-const WEATHER_WAIT_MSG_MULTI_DAY =
-  `${WEATHER_WAIT_MSG}\n\nЗачекайте на лінії — прогноз на тиждень і далі збираємо довше, це займе ще трішки часу.`;
+/** Вихідні — коротше очікування, легший тон. */
+const WEATHER_WAIT_MSG_WEEKEND =
+  `${WEATHER_WAIT_MSG}\n\nВихідні збираю трохи довше, ніж «зараз» — субота з неділею люблять акуратність ☎️ Дякую, що чекаєш. Метеоролог шепоче, що в нього лише два робочі дні на тиждень — і це не ниття, це факт.`;
+
+/** Тиждень / 2 тижні / «коли потепліє» — довший запит до провайдерів. */
+const WEATHER_WAIT_MSG_LONG_RANGE =
+  `${WEATHER_WAIT_MSG}\n\nЗачекайте на лінії — прогноз на тиждень, на два тижні чи довший розбір збираємо довше, ніж картку «погода зараз»; займе ще трішки часу.`;
 
 function parseTime(str) {
   const t = str.trim();
@@ -136,7 +140,9 @@ async function handleCallback(cq) {
       await telegram.sendMessage(chatId, 'Спочатку вкажіть місто: Налаштування → Місто.', { reply_markup: telegram.buildMainKeyboard() });
       return;
     }
-    await telegram.sendMessage(chatId, WEATHER_WAIT_MSG_MULTI_DAY);
+    const waitForecast =
+      data === 'weather_weekend' ? WEATHER_WAIT_MSG_WEEKEND : WEATHER_WAIT_MSG_LONG_RANGE;
+    await telegram.sendMessage(chatId, waitForecast);
     let forecastData;
     try {
       forecastData = await weather.getForecastDays(user.lat, user.lon);
