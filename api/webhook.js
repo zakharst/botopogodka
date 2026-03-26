@@ -168,7 +168,7 @@ async function handleCallback(cq) {
           const warmCtx = formatWarmWindowDataForAi(forecastData, cityDisplay);
           const warmNarr = await ai.getWarmWhenNarrative(warmCtx);
           if (warmNarr) {
-            text = `${WARM_WINDOW_HEADER}${format.escapeHtml(warmNarr.trim())}\n\n<i>По днях:</i>\n${warmBodyHtml}`;
+            text = `${WARM_WINDOW_HEADER}${format.escapeHtml(warmNarr.trim())}\n\n${warmBodyHtml}`;
           } else {
             text = formatWarmWindowMessage(forecastData);
           }
@@ -204,15 +204,15 @@ async function handleCallback(cq) {
         try {
           const periodNarr = await ai.getPeriodForecastNarrative(structured.dataForAi);
           if (periodNarr) {
-            text = `${structured.header}${format.escapeHtml(periodNarr.trim())}\n\n<i>По днях:</i>\n${structured.bodyBlock}${structured.footer}`;
+            text = `${structured.header}${format.escapeHtml(periodNarr.trim())}\n\n${structured.bodyIntroHtml}\n\n${structured.bodyBlock}${structured.footer}`;
           } else {
-            text = structured.header + structured.bodyBlock + structured.footer;
+            text = `${structured.header}${structured.bodyIntroHtml}\n\n${structured.bodyBlock}${structured.footer}`;
           }
         } catch (_) {
-          text = structured.header + structured.bodyBlock + structured.footer;
+          text = `${structured.header}${structured.bodyIntroHtml}\n\n${structured.bodyBlock}${structured.footer}`;
         }
       } else {
-        text = structured.header + structured.bodyBlock + structured.footer;
+        text = `${structured.header}${structured.bodyIntroHtml}\n\n${structured.bodyBlock}${structured.footer}`;
       }
     }
     await telegram.sendLongMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
