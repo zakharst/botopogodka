@@ -10,20 +10,25 @@ import * as format from '../lib/format.js';
 import * as ai from '../lib/ai.js';
 import * as fallback from '../lib/fallback_advice.js';
 import * as analytics from '../lib/analytics.js';
-import { formatWarmWindowMessage } from '../lib/warm_window.js';
+import {
+  WARM_WINDOW_HEADER,
+  formatWarmWindowBodyHtml,
+  formatWarmWindowDataForAi,
+  formatWarmWindowMessage,
+} from '../lib/warm_window.js';
 import { PROFILES } from '../lib/storage.js';
 
 const HELP_TEXT = `Формат міста: Місто, Країна. Погода — однією карткою. Поради щодо одягу — кнопка «Що вдягнути». В Налаштуваннях: місто, профіль, час нагадування.`;
 
 const WEATHER_WAIT_MSG = 'Дзвоню на метеостанцію, зачекай хвильку ☎️';
 
-/** Вихідні — коротше очікування, легший тон. */
+/** Вихідні — трохи більше даних, ніж «зараз». */
 const WEATHER_WAIT_MSG_WEEKEND =
-  `${WEATHER_WAIT_MSG}\n\nВихідні збираю трохи довше, ніж «зараз» — субота з неділею люблять акуратність ☎️ Дякую, що чекаєш. Метеоролог шепоче, що в нього лише два робочі дні на тиждень — і це не ниття, це факт.`;
+  `${WEATHER_WAIT_MSG}\n\nЗбираю прогноз на суботу й неділю — зачекайте ще хвильку.`;
 
 /** Тиждень / 2 тижні / «коли потепліє» — довший запит до провайдерів. */
 const WEATHER_WAIT_MSG_LONG_RANGE =
-  `${WEATHER_WAIT_MSG}\n\nЗачекайте на лінії — прогноз на тиждень, на два тижні чи довший розбір збираємо довше, ніж картку «погода зараз»; займе ще трішки часу.`;
+  `${WEATHER_WAIT_MSG}\n\nТут прогноз довший — зачекайте ще хвильку.`;
 
 function parseTime(str) {
   const t = str.trim();
@@ -147,13 +152,32 @@ async function handleCallback(cq) {
     try {
       forecastData = await weather.getForecastDays(user.lat, user.lon);
     } catch (e) {
-      await telegram.sendMessage(chatId, 'Зараз не можу завантажити прогноз. Спробуйте пізніше.', { reply_markup: telegram.buildMainKeyboard() });
+      await telegram.sendMessage(
+        chatId,
+        'Запит погоди не встиг відповісти. Натисніть кнопку ще раз за хвилину або відкрийте «Погода на потім».',
+        { reply_markup: telegram.buildMainKeyboard() },
+      );
       return;
     }
     const cityDisplay = user.cityDisplay || null;
     let text;
     if (data === 'weather_warm_when') {
-      text = formatWarmWindowMessage(forecastData, cityDisplay);
+      const warmBodyHtml = formatWarmWindowBodyHtml(forecastData);
+      if (warmBodyHtml && ai.isAiAvailable()) {
+        try {
+          const warmCtx = formatWarmWindowDataForAi(forecastData, cityDisplay);
+          const warmNarr = await ai.getWarmWhenNarrative(warmCtx);
+          if (warmNarr) {
+            text = `${WARM_WINDOW_HEADER}${format.escapeHtml(warmNarr.trim())}\n\n<i>По днях:</i>\n${warmBodyHtml}`;
+          } else {
+            text = formatWarmWindowMessage(forecastData);
+          }
+        } catch (_) {
+          text = formatWarmWindowMessage(forecastData);
+        }
+      } else {
+        text = formatWarmWindowMessage(forecastData);
+      }
     } else if (data === 'weather_weekend') {
       const weekendDays = format.getWeekendDays(forecastData);
       if (weekendDays.length > 0 && ai.isAiAvailable()) {
@@ -172,10 +196,24 @@ async function handleCallback(cq) {
         text = format.formatForecastWeekend(forecastData, cityDisplay);
       }
     } else {
-      text =
-        data === 'weather_week'
-          ? format.formatForecastWeek(forecastData, cityDisplay)
-          : format.formatForecast14Days(forecastData, cityDisplay);
+      const periodDays = data === 'weather_week' ? 7 : 14;
+      const structured = format.buildForecastPeriodStructured(forecastData, cityDisplay, periodDays);
+      if (!structured.ok) {
+        text = structured.fallbackFullMessage;
+      } else if (ai.isAiAvailable()) {
+        try {
+          const periodNarr = await ai.getPeriodForecastNarrative(structured.dataForAi);
+          if (periodNarr) {
+            text = `${structured.header}${format.escapeHtml(periodNarr.trim())}\n\n<i>По днях:</i>\n${structured.bodyBlock}${structured.footer}`;
+          } else {
+            text = structured.header + structured.bodyBlock + structured.footer;
+          }
+        } catch (_) {
+          text = structured.header + structured.bodyBlock + structured.footer;
+        }
+      } else {
+        text = structured.header + structured.bodyBlock + structured.footer;
+      }
     }
     await telegram.sendLongMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
     return;
@@ -425,13 +463,27 @@ async function handleMessage(msg) {
       return;
     }
     const offset = timezoneOffsetSeconds ?? w.timezoneOffsetSeconds ?? 0;
-    const local = weather.getLocalTimeStrings(offset);
-    const weatherText = format.formatWeather(w, geo.displayName, local.time);
+    const weatherText = await buildWeatherNowMessage(w, geo.displayName, offset);
     await telegram.sendMessage(chatId, weatherText, { reply_markup: telegram.buildMainKeyboard() });
     return;
   }
 
   await telegram.sendMessage(chatId, 'Не розумію. Оберіть кнопку в меню або /start.', { reply_markup: telegram.buildMainKeyboard() });
+}
+
+/** Картка «зараз» + короткий AI-коментар зверху (якщо є ключ). */
+async function buildWeatherNowMessage(w, cityDisplay, offset) {
+  const local = weather.getLocalTimeStrings(offset);
+  const body = format.formatWeather(w, cityDisplay, local.time);
+  if (!ai.isAiAvailable()) return body;
+  try {
+    const ctx = format.formatCurrentWeatherDataForAi(w, cityDisplay, local.time, local.date);
+    const blurb = await ai.getCurrentWeatherNarrative(ctx);
+    if (blurb && blurb.trim()) {
+      return `${format.escapeHtml(blurb.trim())}\n\n${body}`;
+    }
+  } catch (_) {}
+  return body;
 }
 
 async function actionWeather(chatId, telegramId) {
@@ -451,8 +503,7 @@ async function actionWeather(chatId, telegramId) {
     await storage.setUser(telegramId, { timezoneOffsetSeconds: w.timezoneOffsetSeconds });
   }
   const offset = user.timezoneOffsetSeconds ?? w.timezoneOffsetSeconds ?? 0;
-  const local = weather.getLocalTimeStrings(offset);
-  const text = format.formatWeather(w, user.cityDisplay, local.time);
+  const text = await buildWeatherNowMessage(w, user.cityDisplay, offset);
   await telegram.sendMessage(chatId, text, { reply_markup: telegram.buildMainKeyboard() });
 }
 
